@@ -1,7 +1,7 @@
 """Financial Settlement context: pay sellers for matched trades."""
 
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Dict, List
+from typing import Dict, List, Set
 
 from ecogrid.models import Household, Trade, Transaction, TransactionStatus
 
@@ -23,7 +23,8 @@ class SettlementService:
         self.fee_rate = fee_rate
         self.ledger: List[Transaction] = []
         self.platform_revenue = Decimal("0.00")
-        self._settled_trades: set = set()
+        self._settled_trades: Set[str] = set()
+        self._processed_trades: Set[str] = set()  # settled or failed
 
     def calculate_fee(self, amount: Decimal) -> Decimal:
         return (amount * self.fee_rate).quantize(CENT, rounding=ROUND_HALF_UP)
@@ -59,11 +60,18 @@ class SettlementService:
             txn.status = TransactionStatus.SETTLED
             self._settled_trades.add(trade.trade_id)
 
+        self._processed_trades.add(trade.trade_id)
         self.ledger.append(txn)
         return txn
 
     def settle_all(self, trades: List[Trade]) -> List[Transaction]:
-        return [self.settle(t) for t in trades if t.trade_id not in self._settled_trades]
+        """Settle every trade not already processed in an earlier run.
+
+        Failed trades are skipped too, so re-running a batch does not add
+        duplicate FAILED ledger entries. A failed trade can still be retried
+        deliberately by calling ``settle`` directly.
+        """
+        return [self.settle(t) for t in trades if t.trade_id not in self._processed_trades]
 
     def statement(self, household_id: str) -> List[Transaction]:
         """All transactions involving a household."""

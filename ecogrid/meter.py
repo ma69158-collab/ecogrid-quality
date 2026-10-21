@@ -2,9 +2,9 @@
 
 import csv
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
-from typing import Dict, Iterable, List, Tuple
+from typing import Callable, Dict, Iterable, List, Set, Tuple
 
 from ecogrid.models import MeterReading
 
@@ -26,6 +26,9 @@ def parse_reading(row: Dict[str, str]) -> MeterReading:
         timestamp = datetime.fromisoformat(row["timestamp"])
     except ValueError as exc:
         raise InvalidReadingError(f"Bad timestamp: {row['timestamp']}") from exc
+    if timestamp.tzinfo is None:
+        # Meters report in UTC; make that explicit so readings compare correctly.
+        timestamp = timestamp.replace(tzinfo=timezone.utc)
 
     try:
         generated = Decimal(row["generated_kwh"])
@@ -53,7 +56,7 @@ class MeterIngestionService:
     def __init__(self) -> None:
         self.readings: List[MeterReading] = []
         self.rejected: List[Tuple[Dict[str, str], str]] = []
-        self._seen: set = set()
+        self._seen: Set[Tuple[str, datetime]] = set()
 
     def ingest(self, rows: Iterable[Dict[str, str]]) -> int:
         """Ingest rows, skipping invalid or duplicate readings.
@@ -81,16 +84,17 @@ class MeterIngestionService:
         with open(path, newline="", encoding="utf-8") as handle:
             return self.ingest(csv.DictReader(handle))
 
-    def surplus_by_household(self) -> Dict[str, Decimal]:
-        """Total surplus kWh available to sell, per household."""
+    def _total_by_household(self, value: Callable[[MeterReading], Decimal]) -> Dict[str, Decimal]:
+        """Sum a per-reading value for each household."""
         totals: Dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
         for reading in self.readings:
-            totals[reading.household_id] += reading.surplus_kwh
+            totals[reading.household_id] += value(reading)
         return dict(totals)
+
+    def surplus_by_household(self) -> Dict[str, Decimal]:
+        """Total surplus kWh available to sell, per household."""
+        return self._total_by_household(lambda r: r.surplus_kwh)
 
     def consumption_by_household(self) -> Dict[str, Decimal]:
         """Total consumed kWh per household."""
-        totals: Dict[str, Decimal] = defaultdict(lambda: Decimal("0"))
-        for reading in self.readings:
-            totals[reading.household_id] += reading.consumed_kwh
-        return dict(totals)
+        return self._total_by_household(lambda r: r.consumed_kwh)

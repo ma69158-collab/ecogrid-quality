@@ -10,6 +10,10 @@ from ecogrid.settlement import SettlementService
 
 DATA_FILE = os.path.join(os.path.dirname(__file__), "..", "data", "sample_readings.csv")
 
+# Asking price per kWh for each seller in the demo; others use the default.
+SELLER_PRICES = {"H1": Decimal("0.18")}
+DEFAULT_PRICE = Decimal("0.22")
+
 
 def run_demo() -> None:
     households = {
@@ -27,7 +31,7 @@ def run_demo() -> None:
     surplus = meters.surplus_by_household()
     for household_id, kwh in surplus.items():
         if kwh > 0:
-            price = Decimal("0.18") if household_id == "H1" else Decimal("0.22")
+            price = SELLER_PRICES.get(household_id, DEFAULT_PRICE)
             market.list_offer(household_id, kwh, price, available_surplus=kwh)
             print(f"{household_id} offers {kwh} kWh at ${price}/kWh")
 
@@ -43,5 +47,5 @@ def run_demo() -> None:
         print(f"{h.name}: ${h.wallet_balance}")
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     run_demo()

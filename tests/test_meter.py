@@ -69,3 +69,19 @@ def test_ingest_csv(tmp_path):
     )
     service = MeterIngestionService()
     assert service.ingest_csv(str(csv_file)) == 1
+
+
+def test_timestamps_are_timezone_aware():
+    naive = parse_reading(row())
+    assert naive.timestamp.utcoffset() is not None
+    aware = parse_reading(row(timestamp="2026-10-01T10:00:00+11:00"))
+    assert aware.timestamp.utcoffset().total_seconds() == 11 * 3600
+
+
+def test_same_instant_in_different_timezones_is_duplicate():
+    service = MeterIngestionService()
+    accepted = service.ingest([
+        row(timestamp="2026-10-01T10:00:00+00:00"),
+        row(timestamp="2026-10-01T21:00:00+11:00"),
+    ])
+    assert accepted == 1

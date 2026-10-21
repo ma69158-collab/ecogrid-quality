@@ -1,7 +1,7 @@
 """Core domain models shared across the EcoGrid bounded contexts."""
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import Optional
@@ -11,6 +11,11 @@ import uuid
 def new_id() -> str:
     """Return a short unique identifier."""
     return uuid.uuid4().hex[:12]
+
+
+def utc_now() -> datetime:
+    """Current time as a timezone-aware UTC datetime."""
+    return datetime.now(timezone.utc)
 
 
 class OrderStatus(Enum):
@@ -53,8 +58,19 @@ class MeterReading:
         return surplus if surplus > 0 else Decimal("0")
 
 
+class _RemainingQuantityMixin:
+    """Shared setup for offers and orders: start with the full quantity remaining."""
+
+    quantity_kwh: Decimal
+    remaining_kwh: Optional[Decimal]
+
+    def __post_init__(self) -> None:
+        if self.remaining_kwh is None:
+            self.remaining_kwh = self.quantity_kwh
+
+
 @dataclass
-class SellOffer:
+class SellOffer(_RemainingQuantityMixin):
     """A seller's offer of surplus energy at a minimum price per kWh."""
 
     seller_id: str
@@ -63,15 +79,11 @@ class SellOffer:
     offer_id: str = field(default_factory=new_id)
     remaining_kwh: Optional[Decimal] = None
     status: OrderStatus = OrderStatus.OPEN
-    created_at: datetime = field(default_factory=datetime.now)
-
-    def __post_init__(self) -> None:
-        if self.remaining_kwh is None:
-            self.remaining_kwh = self.quantity_kwh
+    created_at: datetime = field(default_factory=utc_now)
 
 
 @dataclass
-class BuyOrder:
+class BuyOrder(_RemainingQuantityMixin):
     """A buyer's request for energy up to a maximum price per kWh."""
 
     buyer_id: str
@@ -80,11 +92,7 @@ class BuyOrder:
     order_id: str = field(default_factory=new_id)
     remaining_kwh: Optional[Decimal] = None
     status: OrderStatus = OrderStatus.OPEN
-    created_at: datetime = field(default_factory=datetime.now)
-
-    def __post_init__(self) -> None:
-        if self.remaining_kwh is None:
-            self.remaining_kwh = self.quantity_kwh
+    created_at: datetime = field(default_factory=utc_now)
 
 
 @dataclass
@@ -98,7 +106,7 @@ class Trade:
     offer_id: str
     order_id: str
     trade_id: str = field(default_factory=new_id)
-    executed_at: datetime = field(default_factory=datetime.now)
+    executed_at: datetime = field(default_factory=utc_now)
 
     @property
     def total_value(self) -> Decimal:

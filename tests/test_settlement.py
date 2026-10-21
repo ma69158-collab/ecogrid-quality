@@ -68,3 +68,21 @@ def test_statement(households):
     service.settle(make_trade())
     assert len(service.statement("S1")) == 1
     assert service.statement("other") == []
+
+
+def test_failed_trade_not_duplicated_on_rerun(households):
+    households["B1"].wallet_balance = D("0.50")
+    service = SettlementService(households)
+    trade = make_trade()
+    service.settle_all([trade])
+    assert service.settle_all([trade]) == []
+    assert len(service.ledger) == 1
+
+
+def test_failed_trade_can_be_retried_directly(households):
+    households["B1"].wallet_balance = D("0.50")
+    service = SettlementService(households)
+    trade = make_trade()
+    assert service.settle(trade).status == TransactionStatus.FAILED
+    households["B1"].wallet_balance = D("10.00")
+    assert service.settle(trade).status == TransactionStatus.SETTLED
