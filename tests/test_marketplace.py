@@ -53,16 +53,22 @@ def test_cannot_trade_with_self(market):
     assert market.trades == []
 
 
-def test_invalid_price_and_quantity(market):
+def test_invalid_price_rejected(market):
+    quantity, too_high_price = D("5"), D("5.00")
     with pytest.raises(MarketplaceError):
-        market.list_offer("S1", D("5"), D("5.00"))
+        market.list_offer("S1", quantity, too_high_price)
+
+
+def test_zero_quantity_rejected(market):
+    zero_quantity, price = D("0"), D("0.20")
     with pytest.raises(MarketplaceError):
-        market.place_order("B1", D("0"), D("0.20"))
+        market.place_order("B1", zero_quantity, price)
 
 
 def test_cannot_offer_more_than_surplus(market):
+    quantity, price, surplus = D("10"), D("0.20"), D("4")
     with pytest.raises(MarketplaceError):
-        market.list_offer("S1", D("10"), D("0.20"), available_surplus=D("4"))
+        market.list_offer("S1", quantity, price, available_surplus=surplus)
 
 
 def test_cancel_offer(market):

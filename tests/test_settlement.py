@@ -59,8 +59,9 @@ def test_unknown_household(households):
 
 
 def test_invalid_fee_rate(households):
+    bad_rate = D("1.5")
     with pytest.raises(SettlementError):
-        SettlementService(households, fee_rate=D("1.5"))
+        SettlementService(households, fee_rate=bad_rate)
 
 
 def test_statement(households):
