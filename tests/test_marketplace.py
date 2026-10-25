@@ -55,19 +55,19 @@ def test_cannot_trade_with_self(market):
 
 def test_invalid_price_rejected(market):
     quantity, too_high_price = D("5"), D("5.00")
-    with pytest.raises(MarketplaceError):
+    with pytest.raises(MarketplaceError, match="outside allowed range"):
         market.list_offer("S1", quantity, too_high_price)
 
 
 def test_zero_quantity_rejected(market):
     zero_quantity, price = D("0"), D("0.20")
-    with pytest.raises(MarketplaceError):
+    with pytest.raises(MarketplaceError, match="Quantity must be positive"):
         market.place_order("B1", zero_quantity, price)
 
 
 def test_cannot_offer_more_than_surplus(market):
     quantity, price, surplus = D("10"), D("0.20"), D("4")
-    with pytest.raises(MarketplaceError):
+    with pytest.raises(MarketplaceError, match="more energy than measured surplus"):
         market.list_offer("S1", quantity, price, available_surplus=surplus)
 
 
@@ -76,9 +76,9 @@ def test_cancel_offer(market):
     market.cancel_offer(offer.offer_id)
     assert offer.status == OrderStatus.CANCELLED
     assert market.open_offers() == []
-    with pytest.raises(MarketplaceError):
+    with pytest.raises(MarketplaceError, match="can no longer be cancelled"):
         market.cancel_offer(offer.offer_id)
-    with pytest.raises(MarketplaceError):
+    with pytest.raises(MarketplaceError, match="Unknown offer missing"):
         market.cancel_offer("missing")
 
 
@@ -106,14 +106,14 @@ def test_release_trade_only_once(market):
     market.place_order("B1", D("3"), D("0.30"))
     trade = market.trades[0]
     market.release_trade(trade)
-    with pytest.raises(MarketplaceError):
+    with pytest.raises(MarketplaceError, match="already released"):
         market.release_trade(trade)
 
 
 def test_release_unknown_trade_raises(market):
     stray = Trade(seller_id="S1", buyer_id="B1", quantity_kwh=D("1"),
                   price_per_kwh=D("0.20"), offer_id="missing", order_id="missing")
-    with pytest.raises(MarketplaceError):
+    with pytest.raises(MarketplaceError, match="Unknown offer or order"):
         market.release_trade(stray)
 
 

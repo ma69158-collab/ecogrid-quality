@@ -28,17 +28,17 @@ def test_surplus_never_negative():
 
 
 @pytest.mark.parametrize(
-    "bad_row",
+    ("bad_row", "message"),
     [
-        row(meter_id=""),
-        row(timestamp="yesterday"),
-        row(generated_kwh="abc"),
-        row(consumed_kwh="-1"),
-        row(generated_kwh="999"),
+        (row(meter_id=""), "Missing fields"),
+        (row(timestamp="yesterday"), "Bad timestamp"),
+        (row(generated_kwh="abc"), "must be numeric"),
+        (row(consumed_kwh="-1"), "cannot be negative"),
+        (row(generated_kwh="999"), "exceeds sanity limit"),
     ],
 )
-def test_invalid_readings_raise(bad_row):
-    with pytest.raises(InvalidReadingError):
+def test_invalid_readings_raise(bad_row, message):
+    with pytest.raises(InvalidReadingError, match=message):
         parse_reading(bad_row)
 
 

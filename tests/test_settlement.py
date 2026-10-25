@@ -46,7 +46,7 @@ def test_trade_cannot_be_settled_twice(households):
     service = SettlementService(households)
     trade = make_trade()
     service.settle(trade)
-    with pytest.raises(SettlementError):
+    with pytest.raises(SettlementError, match="already processed"):
         service.settle(trade)
     assert service.settle_all([trade]) == []
 
@@ -55,13 +55,13 @@ def test_unknown_household(households):
     service = SettlementService(households)
     trade = make_trade()
     trade.buyer_id = "nobody"
-    with pytest.raises(SettlementError):
+    with pytest.raises(SettlementError, match="Unknown buyer or seller"):
         service.settle(trade)
 
 
 def test_invalid_fee_rate(households):
     bad_rate = D("1.5")
-    with pytest.raises(SettlementError):
+    with pytest.raises(SettlementError, match="Fee rate must be between 0 and 1"):
         SettlementService(households, fee_rate=bad_rate)
 
 
@@ -87,7 +87,7 @@ def test_failed_trade_is_final(households):
     trade = make_trade()
     assert service.settle(trade).status == TransactionStatus.FAILED
     households["B1"].wallet_balance = D("10.00")
-    with pytest.raises(SettlementError):
+    with pytest.raises(SettlementError, match="already processed"):
         service.settle(trade)
 
 
