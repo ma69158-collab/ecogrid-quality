@@ -25,7 +25,8 @@ jobs:
 
       # Locked, hash-checked dependencies; wheels only, so no package setup scripts run.
       - name: Install dependencies
-        run: pip install --require-hashes --only-binary=:all: -r requirements.txt
+        run: |
+          pip install --require-hashes --only-binary=:all: -r requirements.txt
 
       - name: Run tests with coverage
         run: python -m pytest --cov=ecogrid --cov-report=xml
