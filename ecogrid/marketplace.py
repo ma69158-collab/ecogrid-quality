@@ -1,7 +1,7 @@
 """Marketplace context: match sellers of surplus energy with buyers."""
 
 from decimal import Decimal
-from typing import Dict, List, Optional, Set, Union
+from typing import Dict, List, Optional, Set
 
 from ecogrid.models import BuyOrder, OrderStatus, SellOffer, Trade
 
@@ -74,7 +74,7 @@ class Marketplace:
         return sorted(active, key=lambda o: (o.price_per_kwh, o.created_at))
 
     @staticmethod
-    def _fill_status(item: Union[SellOffer, BuyOrder]) -> OrderStatus:
+    def _fill_status(item: SellOffer | BuyOrder) -> OrderStatus:
         return OrderStatus.OPEN if item.remaining_kwh == item.quantity_kwh else OrderStatus.PARTIALLY_FILLED
 
     def release_trade(self, trade: Trade) -> None:
