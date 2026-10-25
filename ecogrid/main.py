@@ -38,9 +38,12 @@ def run_demo() -> None:
     market.place_order("H3", Decimal("6"), Decimal("0.25"))
     market.place_order("H4", Decimal("8"), Decimal("0.25"))
 
-    settlement = SettlementService(households)
+    settlement = SettlementService(households, on_failed=market.release_trade)
     for txn in settlement.settle_all(market.trades):
         print(f"{txn.payer_id} -> {txn.payee_id}: ${txn.gross_amount} ({txn.status.value})")
+
+    for offer in market.open_offers():
+        print(f"{offer.seller_id} still offers {offer.remaining_kwh} kWh")
 
     print(f"Platform revenue: ${settlement.platform_revenue}")
     for h in households.values():

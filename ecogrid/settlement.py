@@ -1,7 +1,7 @@
 """Financial Settlement context: pay sellers for matched trades."""
 
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Dict, List, Set
+from typing import Callable, Dict, List, Optional, Set
 
 from ecogrid.models import Household, Trade, Transaction, TransactionStatus
 
@@ -16,23 +16,31 @@ class SettlementError(Exception):
 class SettlementService:
     """Moves money between household wallets and keeps a ledger."""
 
-    def __init__(self, households: Dict[str, Household], fee_rate: Decimal = PLATFORM_FEE_RATE) -> None:
+    def __init__(
+        self,
+        households: Dict[str, Household],
+        fee_rate: Decimal = PLATFORM_FEE_RATE,
+        on_failed: Optional[Callable[[Trade], None]] = None,
+    ) -> None:
+        """``on_failed`` is called with a trade whose payment failed, so the
+        marketplace can return that energy to the seller's offer."""
         if fee_rate < 0 or fee_rate >= 1:
             raise SettlementError("Fee rate must be between 0 and 1")
         self.households = households
         self.fee_rate = fee_rate
+        self.on_failed = on_failed
         self.ledger: List[Transaction] = []
         self.platform_revenue = Decimal("0.00")
-        self._settled_trades: Set[str] = set()
         self._processed_trades: Set[str] = set()  # settled or failed
 
     def calculate_fee(self, amount: Decimal) -> Decimal:
         return (amount * self.fee_rate).quantize(CENT, rounding=ROUND_HALF_UP)
 
     def settle(self, trade: Trade) -> Transaction:
-        """Settle one trade. Each trade can only be settled once."""
-        if trade.trade_id in self._settled_trades:
-            raise SettlementError(f"Trade {trade.trade_id} already settled")
+        """Settle one trade. Each trade is processed once: a failed trade is
+        final, its energy is released, and the buyer places a new order."""
+        if trade.trade_id in self._processed_trades:
+            raise SettlementError(f"Trade {trade.trade_id} already processed")
 
         buyer = self.households.get(trade.buyer_id)
         seller = self.households.get(trade.seller_id)
@@ -58,18 +66,18 @@ class SettlementService:
             seller.wallet_balance += txn.net_amount
             self.platform_revenue += fee
             txn.status = TransactionStatus.SETTLED
-            self._settled_trades.add(trade.trade_id)
 
         self._processed_trades.add(trade.trade_id)
         self.ledger.append(txn)
+        if txn.status == TransactionStatus.FAILED and self.on_failed is not None:
+            self.on_failed(trade)
         return txn
 
     def settle_all(self, trades: List[Trade]) -> List[Transaction]:
         """Settle every trade not already processed in an earlier run.
 
         Failed trades are skipped too, so re-running a batch does not add
-        duplicate FAILED ledger entries. A failed trade can still be retried
-        deliberately by calling ``settle`` directly.
+        duplicate FAILED ledger entries or release the same energy twice.
         """
         return [self.settle(t) for t in trades if t.trade_id not in self._processed_trades]
 

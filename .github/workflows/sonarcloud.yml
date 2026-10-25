@@ -6,26 +6,32 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Least privilege: the workflow only needs to read the repository.
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # Third-party actions are pinned to full commit SHAs (tag shown in the comment).
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.11"
 
+      # Locked, hash-checked dependencies; wheels only, so no package setup scripts run.
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install --require-hashes --only-binary=:all: -r requirements.txt
 
       - name: Run tests with coverage
         run: python -m pytest --cov=ecogrid --cov-report=xml
 
       - name: SonarCloud scan
-        uses: SonarSource/sonarqube-scan-action@v6
+        uses: SonarSource/sonarqube-scan-action@fd88b7d7ccbaefd23d8f36f73b59db7a3d246602 # v6.0.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: https://sonarcloud.io

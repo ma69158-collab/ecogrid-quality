@@ -1,0 +1,4 @@
+# Top-level test dependencies. The locked file requirements.txt is generated from this with:
+#   pip-compile --generate-hashes --strip-extras -o requirements.txt requirements.in
+pytest>=8.0
+pytest-cov>=5.0

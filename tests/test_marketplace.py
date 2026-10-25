@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 
 from ecogrid.marketplace import Marketplace, MarketplaceError
-from ecogrid.models import OrderStatus
+from ecogrid.models import OrderStatus, Trade
 
 D = Decimal
 
@@ -80,3 +80,47 @@ def test_cancel_offer(market):
         market.cancel_offer(offer.offer_id)
     with pytest.raises(MarketplaceError):
         market.cancel_offer("missing")
+
+
+def test_release_trade_restores_offer_and_order(market):
+    offer = market.list_offer("S1", D("5"), D("0.20"))
+    order = market.place_order("B1", D("3"), D("0.30"))
+    market.release_trade(market.trades[0])
+    assert offer.remaining_kwh == D("5")
+    assert offer.status == OrderStatus.OPEN
+    assert order.remaining_kwh == D("3")
+    assert order.status == OrderStatus.OPEN
+
+
+def test_release_one_of_two_trades_leaves_offer_partially_filled(market):
+    offer = market.list_offer("S1", D("5"), D("0.20"))
+    market.place_order("B1", D("3"), D("0.30"))
+    market.place_order("B2", D("1"), D("0.30"))
+    market.release_trade(market.trades[0])
+    assert offer.remaining_kwh == D("4")
+    assert offer.status == OrderStatus.PARTIALLY_FILLED
+
+
+def test_release_trade_only_once(market):
+    market.list_offer("S1", D("5"), D("0.20"))
+    market.place_order("B1", D("3"), D("0.30"))
+    trade = market.trades[0]
+    market.release_trade(trade)
+    with pytest.raises(MarketplaceError):
+        market.release_trade(trade)
+
+
+def test_release_unknown_trade_raises(market):
+    stray = Trade(seller_id="S1", buyer_id="B1", quantity_kwh=D("1"),
+                  price_per_kwh=D("0.20"), offer_id="missing", order_id="missing")
+    with pytest.raises(MarketplaceError):
+        market.release_trade(stray)
+
+
+def test_release_keeps_cancelled_offer_cancelled(market):
+    offer = market.list_offer("S1", D("5"), D("0.20"))
+    market.place_order("B1", D("3"), D("0.30"))
+    market.cancel_offer(offer.offer_id)
+    market.release_trade(market.trades[0])
+    assert offer.remaining_kwh == D("5")
+    assert offer.status == OrderStatus.CANCELLED

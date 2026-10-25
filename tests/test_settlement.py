@@ -2,6 +2,7 @@ from decimal import Decimal
 
 import pytest
 
+from ecogrid.marketplace import Marketplace
 from ecogrid.models import Household, Trade, TransactionStatus
 from ecogrid.settlement import SettlementError, SettlementService
 
@@ -80,10 +81,38 @@ def test_failed_trade_not_duplicated_on_rerun(households):
     assert len(service.ledger) == 1
 
 
-def test_failed_trade_can_be_retried_directly(households):
+def test_failed_trade_is_final(households):
     households["B1"].wallet_balance = D("0.50")
     service = SettlementService(households)
     trade = make_trade()
     assert service.settle(trade).status == TransactionStatus.FAILED
     households["B1"].wallet_balance = D("10.00")
-    assert service.settle(trade).status == TransactionStatus.SETTLED
+    with pytest.raises(SettlementError):
+        service.settle(trade)
+
+
+def test_on_failed_called_only_for_failed_payments(households):
+    failed = []
+    service = SettlementService(households, on_failed=failed.append)
+    paid = make_trade(quantity="1")
+    service.settle(paid)
+    households["B1"].wallet_balance = D("0.10")
+    unpaid = make_trade(quantity="5")
+    service.settle(unpaid)
+    assert failed == [unpaid]
+
+
+def test_d02_failed_payment_returns_energy_to_offer():
+    """Regression test for D-02: energy from a failed payment goes back on sale."""
+    homes = {"S1": Household("S1", "Seller", has_solar=True),
+             "B1": Household("B1", "Buyer", wallet_balance=D("0.10"))}
+    market = Marketplace()
+    offer = market.list_offer("S1", D("5"), D("0.20"))
+    order = market.place_order("B1", D("3"), D("0.30"))
+    service = SettlementService(homes, on_failed=market.release_trade)
+    txns = service.settle_all(market.trades)
+    assert txns[0].status == TransactionStatus.FAILED
+    assert offer.remaining_kwh == D("5")
+    assert order.remaining_kwh == D("3")
+    assert service.settle_all(market.trades) == []
+    assert offer.remaining_kwh == D("5")

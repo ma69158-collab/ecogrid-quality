@@ -1,7 +1,7 @@
 """Marketplace context: match sellers of surplus energy with buyers."""
 
 from decimal import Decimal
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set, Union
 
 from ecogrid.models import BuyOrder, OrderStatus, SellOffer, Trade
 
@@ -19,6 +19,7 @@ class Marketplace:
         self.offers: Dict[str, SellOffer] = {}
         self.orders: Dict[str, BuyOrder] = {}
         self.trades: List[Trade] = []
+        self._released_trades: Set[str] = set()
 
     # ----- validation -------------------------------------------------
     def _check_price(self, price: Decimal) -> None:
@@ -71,6 +72,30 @@ class Marketplace:
             if o.status in (OrderStatus.OPEN, OrderStatus.PARTIALLY_FILLED)
         ]
         return sorted(active, key=lambda o: (o.price_per_kwh, o.created_at))
+
+    @staticmethod
+    def _fill_status(item: Union[SellOffer, BuyOrder]) -> OrderStatus:
+        return OrderStatus.OPEN if item.remaining_kwh == item.quantity_kwh else OrderStatus.PARTIALLY_FILLED
+
+    def release_trade(self, trade: Trade) -> None:
+        """Undo a trade whose payment failed (defect D-02).
+
+        The energy goes back to the seller's offer and the unfilled quantity
+        back to the buyer's order. Each trade can be released only once, so a
+        repeated failure can never create energy that was not generated.
+        """
+        if trade.trade_id in self._released_trades:
+            raise MarketplaceError(f"Trade {trade.trade_id} already released")
+        offer = self.offers.get(trade.offer_id)
+        order = self.orders.get(trade.order_id)
+        if offer is None or order is None:
+            raise MarketplaceError(f"Unknown offer or order for trade {trade.trade_id}")
+        offer.remaining_kwh += trade.quantity_kwh
+        order.remaining_kwh += trade.quantity_kwh
+        if offer.status != OrderStatus.CANCELLED:
+            offer.status = self._fill_status(offer)
+        order.status = self._fill_status(order)
+        self._released_trades.add(trade.trade_id)
 
     # ----- matching ---------------------------------------------------
     def match(self, order: BuyOrder) -> List[Trade]:
